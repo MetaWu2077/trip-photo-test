@@ -28,7 +28,7 @@ android {
         versionName flutter.versionName
     }
 
-buildTypes {
+    buildTypes {
         release {
             if (project.findProperty("ciDebugSigning") == "true") {
                 signingConfig signingConfigs.debug
