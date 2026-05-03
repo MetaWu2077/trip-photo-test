@@ -9,7 +9,7 @@ dependencies:
   flutter:
     sdk: flutter
   image_picker: ^1.0.4
-  tencent_cos: ^2.0.0
+  tencent_cos: ^1.0.8
   image: ^4.1.3
   path_provider: ^2.1.1
   permission_handler: ^11.1.0
