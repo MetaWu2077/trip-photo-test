@@ -21,6 +21,8 @@ jobs:
       - run: flutter pub get
       
       - name: 编译APK（注入腾讯云密钥）
+        env:
+          ORG_GRADLE_PROJECT_ciDebugSigning: "true"
         run: |
           flutter build apk --release \
             --dart-define=COS_APP_ID=${{ secrets.COS_APP_ID }} \

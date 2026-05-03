@@ -28,10 +28,11 @@ android {
         versionName flutter.versionName
     }
 
-    buildTypes {
+buildTypes {
         release {
-            // Use debug signing for CI; replace with a proper keystore for production.
-            signingConfig signingConfigs.debug
+            if (project.findProperty("ciDebugSigning") == "true") {
+                signingConfig signingConfigs.debug
+            }
         }
     }
 }
