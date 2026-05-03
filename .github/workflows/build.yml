@@ -1,6 +1,9 @@
 name: 编译APK
+
 on:
   push:
+    branches: [ main, master ]
+  pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
@@ -9,28 +12,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.0'
           channel: 'stable'
-      
-      - run: flutter pub get
-      
-      - name: 编译APK（注入腾讯云密钥）
-        run: |
-          flutter build apk --release \
-            --dart-define=COS_APP_ID=${{ secrets.COS_APP_ID }} \
-            --dart-define=COS_SECRET_ID=${{ secrets.COS_SECRET_ID }} \
-            --dart-define=COS_SECRET_KEY=${{ secrets.COS_SECRET_KEY }} \
-            --dart-define=COS_REGION=${{ secrets.COS_REGION }} \
-            --dart-define=COS_BUCKET=${{ secrets.COS_BUCKET }} \
-            --dart-define=COS_DOMAIN=${{ secrets.COS_DOMAIN }}
-      
+
+      - name: 安装依赖
+        run: flutter pub get
+
+      - name: 代码分析
+        run: flutter analyze
+
+      - name: 运行测试
+        run: flutter test
+
+      - name: 编译 Debug APK
+        run: flutter build apk --debug
+
+      - name: 编译 Release APK
+        run: flutter build apk --release
+
       - uses: actions/upload-artifact@v4
         with:
-          name: trip-photo-test-apk
+          name: trip-photo-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+

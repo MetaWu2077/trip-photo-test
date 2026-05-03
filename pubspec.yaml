@@ -1,5 +1,5 @@
 name: trip_photo_test
-description: 旅拍照片上传测试
+description: 旅途相册 - 记录你的旅行精彩瞬间
 version: 1.0.0+1
 
 environment:
@@ -8,12 +8,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  image_picker: ^1.0.4
-  tencent_cos: ^1.0.8
-  image: ^4.1.3
-  path_provider: ^2.1.1
-  permission_handler: ^11.1.0
-  flutter_dotenv: ^5.1.0
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
 
 flutter:
   uses-material-design: true
