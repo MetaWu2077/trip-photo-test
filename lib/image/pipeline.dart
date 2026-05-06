@@ -10,8 +10,9 @@ import 'package:image/image.dart' as img;
   }
   final thumbForPreview = img.copyResize(originalImage, width: 480);
   final previewBytes = img.encodeJpg(thumbForPreview, quality: 82);
+  // 长边 ≤1080，quality 70 为目标 100-200KB 的起点；实测不达标可降至 65。
   final thumbnail = img.copyResize(originalImage, width: 1080);
-  final thumbnailBytes = img.encodeJpg(thumbnail, quality: 80);
+  final thumbnailBytes = img.encodeJpg(thumbnail, quality: 70);
   return (
     preview: Uint8List.fromList(previewBytes),
     thumb: Uint8List.fromList(thumbnailBytes),
