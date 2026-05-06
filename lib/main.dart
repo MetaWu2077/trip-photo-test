@@ -4,6 +4,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'cos/cos_shared.dart';
 import 'features/sony/sony_wifi_upload_page.dart';
 import 'features/upload/upload_page.dart';
+import 'features/upload/repositories/task_queue_repository.dart';
+import 'features/upload/task_queue_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +18,8 @@ void main() async {
       '或用 launch.json / --dart-define-from-file 编译注入。',
     );
   }
+  // 初始化 Hive 持久化（任务队列依赖）。
+  await taskQueueRepository.init();
   runApp(const MyApp());
 }
 
@@ -32,7 +36,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF006B7D)),
       ),
       home: DefaultTabController(
-        length: 2,
+        length: 3,
         child: Scaffold(
           appBar: AppBar(
             title: const Text('旅拍 COS'),
@@ -40,6 +44,7 @@ class MyApp extends StatelessWidget {
               tabs: [
                 Tab(icon: Icon(Icons.photo_library_outlined), text: '相册上传'),
                 Tab(icon: Icon(Icons.wifi_tethering), text: '索尼 WiFi'),
+                Tab(icon: Icon(Icons.queue_rounded), text: '任务队列'),
               ],
             ),
           ),
@@ -47,6 +52,7 @@ class MyApp extends StatelessWidget {
             children: [
               UploadTestPage(),
               SonyWifiUploadPage(),
+              TaskQueuePage(),
             ],
           ),
         ),
