@@ -21,9 +21,13 @@ enum UploadStatus {
 /// 单个上传任务（持久化到 Hive）。
 @HiveType(typeId: 1)
 class UploadTask extends HiveObject {
-  /// 任务 ID（时间戳+随机数，MVP 阶段兼作 sessionId）。
+  /// 任务 ID（时间戳+随机数）。
   @HiveField(0)
   final String id;
+
+  /// 关联的 sessionId（即订单 ID）。
+  @HiveField(9)
+  final String sessionId;
 
   /// 原始图片路径。
   @HiveField(1)
@@ -59,6 +63,7 @@ class UploadTask extends HiveObject {
 
   UploadTask({
     required this.id,
+    required this.sessionId,
     required this.filePath,
     required this.uploadOriginal,
     this.thumbKey,
