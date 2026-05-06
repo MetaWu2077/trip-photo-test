@@ -5,14 +5,14 @@
 与 templates/ralph-loop-safety-checklist.md。
 
 任务开始时间：2026-05-06
-关联计划：opc-harness/plans/active/2026-05-06-first-ralph-loop-setup.md
+关联计划：opc-harness/plans/active/2026-05-05-trip-photo-baseline-hardening.md
 关联产品文档：products/trip-photo-test/status.md, roadmap.md
 关联 checklist：dev/upload-pipeline-checklist.md
-退出条件（从计划复制）：
+验证命令：flutter analyze
+退出条件（步骤 3）：
 - flutter analyze 0 报错
-- main.dart ≤ 200 行
-- cos/config/features/upload 目录存在且 main.dart 通过接口调用
-- LOOP_LOG.md 完整，最后一条是 EXIT
+- 默认仅缩略图
+- 可切换缩略+原图模式
 范围红线：
 - 不动 CloudBase / 小程序 / 阶段 B+
 - 不引入新依赖
@@ -20,22 +20,25 @@
 - 不做多步骤打包，一次只做一个步骤
 - 不自己 merge PR
 - 不 push 到 main/master
-验证命令：flutter analyze
 
-## 2026-05-06 EXIT
-- 全部步骤完成：是
-- 总 iteration 数：1
-- 最终 commits：见 PR
-- PR 链接：待填
-- 验证最终输出：
-  - flutter analyze: pass (0 issues)
-  - main.dart 行数: 56 行（≤ 200 ✓）
-  - cos/ 目录: lib/cos/ 存在，cos_shared.dart + cos_client_verbose.dart
-  - config/ 目录: lib/config/ 存在，cos_config_loader.dart
-  - features/upload/ 目录: lib/features/upload/ 存在，upload_page.dart
-  - features/sony/ 目录: lib/features/sony/ 存在，sony_wifi_upload_page.dart
-  - sony/ 目录: lib/sony/ 存在，sony_client.dart
-  - image/ 目录: lib/image/ 存在，pipeline.dart
-  - main.dart 通过接口调用各模块（imports 路径使用新目录结构）
-- 剩余风险：单测未覆盖（本次跳过）；config/ 模块内容为 stub 待后续迭代充实
-- 建议下一个任务：阶段 A 步骤 1 重构 → PR 评审通过后进入步骤 2（缩略图规格对齐）
+## 2026-05-06 iter 3 — 步骤 3：原图上传策略开关
+- 选中步骤：阶段 A 步骤 3 — 原图上传策略开关
+- 改动文件：lib/features/upload/upload_page.dart（1 个文件）
+- 改动概述：
+  - 新增 _uploadOriginal 状态（默认 false = 仅缩略图）
+  - Switch Card 显示当前模式（缩略图/缩略+原图）
+  - _pickAndUpload() 根据 _uploadOriginal 条件上传原图
+- 验证命令与结果：
+  - flutter analyze: pass（0 issues，lib/ 目录）
+  - 真机测试: ✓ 默认仅缩略图；开关打开后缩略+原图均上传
+- commit：32a5155 feat(upload-switch): 阶段 A 步骤 3
+- PR: https://github.com/MetaWu2077/trip-photo-test/pull/5
+- 下一步：PR merge 后进入步骤 4
+
+## 2026-05-06 EXIT — 步骤 2 完成
+- 步骤 2 真机验证：30 张样本全部缩略图 120KB 以下 ✓
+- 步骤 2 commits: 5114447 + 22bbb76 + 4f0724f
+- PR: https://github.com/MetaWu2077/trip-photo-test/pull/4
+
+## 步骤 1 历史（已 EXIT）
+- PR: https://github.com/MetaWu2077/trip-photo-test/pull/3（已 merge）

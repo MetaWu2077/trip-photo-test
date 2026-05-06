@@ -21,6 +21,8 @@ class UploadTestPage extends StatefulWidget {
 class _UploadTestPageState extends State<UploadTestPage> {
   final ImagePicker _picker = ImagePicker();
 
+  /// 上传策略：true = 缩略图+原图，false = 仅缩略图（默认）。
+  bool _uploadOriginal = false;
   String? _thumbnailUrl;
   String? _originalUrl;
   Uint8List? _previewJpeg;
@@ -166,11 +168,13 @@ class _UploadTestPageState extends State<UploadTestPage> {
 
       final thumbUrl = cosObjectPublicUrl(_publicBaseUrl, thumbKey);
 
-      final originalKey = 'test/original_$ts.jpg';
-      setState(() => _status = '上传原图到 COS…');
-      await cosClient.putObjectOrThrow(originalKey, image.path);
-
-      final originalUrl = cosObjectPublicUrl(_publicBaseUrl, originalKey);
+      String? originalUrl;
+      if (_uploadOriginal) {
+        final originalKey = 'test/original_$ts.jpg';
+        setState(() => _status = '上传原图到 COS…');
+        await cosClient.putObjectOrThrow(originalKey, image.path);
+        originalUrl = cosObjectPublicUrl(_publicBaseUrl, originalKey);
+      }
 
       setState(() {
         _thumbnailUrl = thumbUrl;
@@ -279,6 +283,44 @@ class _UploadTestPageState extends State<UploadTestPage> {
                 ),
               ],
               const SizedBox(height: 16),
+              Card(
+                color: scheme.surfaceContainerHighest,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _uploadOriginal ? Icons.cloud_upload_rounded : Icons.image_rounded,
+                        size: 20,
+                        color: scheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '上传策略',
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
+                            Text(
+                              _uploadOriginal ? '缩略图 + 原图' : '仅缩略图',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: scheme.primary,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _uploadOriginal,
+                        onChanged: (v) => setState(() => _uploadOriginal = v),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
               FilledButton.icon(
                 onPressed: _isUploading ? null : _pickAndUpload,
                 icon: _isUploading
