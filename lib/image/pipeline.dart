@@ -42,3 +42,9 @@ img.Image _resizeLongestSide(img.Image src, int maxDim) {
   );
 }
 
+/// 解码 JPEG bytes 为原始像素数据（用于预览显示）。
+/// 运行在主 isolate，直接返回原始 JPEG bytes 由 Image.memory 渲染。
+Uint8List decodeJpegThumb(Uint8List jpegBytes) {
+  return jpegBytes;
+}
+

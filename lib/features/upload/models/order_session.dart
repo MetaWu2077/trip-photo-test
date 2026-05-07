@@ -40,6 +40,10 @@ class OrderSession extends HiveObject {
   @HiveField(5)
   DateTime? endedAt;
 
+  /// 客户手机尾号后四位。
+  @HiveField(7)
+  final String phoneLast4;
+
   /// 创建时间。
   @HiveField(6)
   final DateTime createdAt;
@@ -48,6 +52,7 @@ class OrderSession extends HiveObject {
     required this.id,
     required this.customerName,
     required this.location,
+    required this.phoneLast4,
     this.status = OrderStatus.pending,
     this.startedAt,
     this.endedAt,
@@ -99,13 +104,14 @@ class OrderSessionAdapter extends TypeAdapter<OrderSession> {
       startedAt: fields[4] as DateTime?,
       endedAt: fields[5] as DateTime?,
       createdAt: fields[6] as DateTime,
+      phoneLast4: fields[7] as String? ?? '',
     );
   }
 
   @override
   void write(BinaryWriter writer, OrderSession obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -119,6 +125,8 @@ class OrderSessionAdapter extends TypeAdapter<OrderSession> {
       ..writeByte(5)
       ..write(obj.endedAt)
       ..writeByte(6)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(7)
+      ..write(obj.phoneLast4);
   }
 }

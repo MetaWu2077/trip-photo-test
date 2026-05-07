@@ -56,18 +56,21 @@ class OrderSessionRepository {
         id: 'order_001',
         customerName: '李女士',
         location: '厦门鼓浪屿',
+        phoneLast4: '1234',
         createdAt: DateTime.now().subtract(const Duration(days: 2)),
       ),
       OrderSession(
         id: 'order_002',
         customerName: '张先生',
         location: '厦门中山路',
+        phoneLast4: '5678',
         createdAt: DateTime.now().subtract(const Duration(days: 1)),
       ),
       OrderSession(
         id: 'order_003',
         customerName: '王小姐',
         location: '厦门曾厝垵',
+        phoneLast4: '9012',
         createdAt: DateTime.now(),
       ),
     ];

@@ -3,6 +3,7 @@ import 'models/order_session.dart';
 import 'repositories/order_session_repository.dart';
 import 'session_manager.dart';
 import 'task_queue_notifier.dart';
+import 'order_detail_page.dart';
 
 /// 订单 Tab：模拟的预约订单列表，点击后开始对应拍摄 session。
 class OrderPage extends StatefulWidget {
@@ -145,23 +146,36 @@ class _OrderPageState extends State<OrderPage> {
                       itemCount: _orders.length,
                       itemBuilder: (context, index) {
                         final order = _orders[index];
-                        return ListTile(
-                          leading: Text(_statusIcon(order.status), style: const TextStyle(fontSize: 20)),
-                          title: Text(order.customerName),
-                          subtitle: Text(
-                            '${order.location} · ${order.statusLabel}',
-                            style: TextStyle(
-                              color: order.status == OrderStatus.active ? scheme.primary : null,
+                        final isClickable = order.status == OrderStatus.completed;
+                        return InkWell(
+                          onTap: isClickable
+                              ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => OrderDetailPage(order: order),
+                                    ),
+                                  );
+                                }
+                              : null,
+                          child: ListTile(
+                            leading: Text(_statusIcon(order.status), style: const TextStyle(fontSize: 20)),
+                            title: Text(order.customerName),
+                            subtitle: Text(
+                              '${order.location} · ${order.statusLabel}',
+                              style: TextStyle(
+                                color: order.status == OrderStatus.active ? scheme.primary : null,
+                              ),
                             ),
+                            trailing: order.status == OrderStatus.pending
+                                ? FilledButton.tonal(
+                                    onPressed: () => _startOrder(order),
+                                    child: const Text('开始拍摄'),
+                                  )
+                                : order.status == OrderStatus.active
+                                    ? const Icon(Icons.camera_alt_rounded, color: Colors.green)
+                                    : const Icon(Icons.chevron_right_rounded),
                           ),
-                          trailing: order.status == OrderStatus.pending
-                              ? FilledButton.tonal(
-                                  onPressed: () => _startOrder(order),
-                                  child: const Text('开始拍摄'),
-                                )
-                              : order.status == OrderStatus.active
-                                  ? const Icon(Icons.camera_alt_rounded, color: Colors.green)
-                                  : null,
                         );
                       },
                     ),

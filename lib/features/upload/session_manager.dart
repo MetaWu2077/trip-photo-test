@@ -40,10 +40,23 @@ class SessionManager {
     _activeSession = null;
   }
 
+  /// 当前 session 的 COS 目录名：手机后四位 + 订单日期时间。
+  /// 格式：{phoneLast4}_{yyyyMMdd_HHmm}
+  String get cosDirName {
+    if (_activeSession == null) return 'no-session';
+    final s = _activeSession!;
+    final d = s.createdAt;
+    final padM = d.month < 10 ? '0${d.month}' : '${d.month}';
+    final padD = d.day < 10 ? '0${d.day}' : '${d.day}';
+    final padH = d.hour < 10 ? '0${d.hour}' : '${d.hour}';
+    final padMin = d.minute < 10 ? '0${d.minute}' : '${d.minute}';
+    return '${s.phoneLast4}_${d.year}$padM${padD}_$padH$padMin';
+  }
+
   /// 获取当前 session 的 COS 上传根路径（不含文件名）。
-  /// 格式：thumb/{sessionId}/ 或 original/{sessionId}/
-  String thumbBasePath() => 'thumb/${_activeSession?.id ?? 'no-session'}/';
-  String originalBasePath() => 'original/${_activeSession?.id ?? 'no-session'}/';
+  /// 格式：thumb/{cosDirName}/ 或 original/{cosDirName}/
+  String thumbBasePath() => 'thumb/$cosDirName/';
+  String originalBasePath() => 'original/$cosDirName/';
 
   /// 上传时拼接完整的 COS object key。
   /// [photoId] 使用任务 ID 简化处理。
