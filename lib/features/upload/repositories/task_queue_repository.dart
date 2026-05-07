@@ -6,12 +6,27 @@ import '../models/upload_task.dart';
 class TaskQueueRepository {
   static const String _boxName = 'upload_tasks';
   Box<UploadTask>? _box;
+  Future<void>? _initFuture;
 
   /// 初始化（APP 启动时调用一次）。
-  Future<void> init() async {
+  Future<void> init() {
+    if (_box != null && _box!.isOpen) return Future.value();
+    _initFuture ??= _doInit();
+    return _initFuture!;
+  }
+
+  Future<void> _doInit() async {
     await Hive.initFlutter();
-    Hive.registerAdapter(UploadStatusAdapter());
-    Hive.registerAdapter(UploadTaskAdapter());
+    if (!Hive.isAdapterRegistered(0)) {
+      Hive.registerAdapter(UploadStatusAdapter());
+    }
+    if (!Hive.isAdapterRegistered(1)) {
+      Hive.registerAdapter(UploadTaskAdapter());
+    }
+    if (Hive.isBoxOpen(_boxName)) {
+      _box = Hive.box<UploadTask>(_boxName);
+      return;
+    }
     _box = await Hive.openBox<UploadTask>(_boxName);
   }
 

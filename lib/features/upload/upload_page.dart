@@ -145,11 +145,10 @@ class _UploadTestPageState extends State<UploadTestPage> {
 
       setState(() => _status = '打开相册…');
 
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
+      final List<XFile> images = await _picker.pickMultiImage(
         imageQuality: 92,
       );
-      if (image == null) {
+      if (images.isEmpty) {
         setState(() {
           _isUploading = false;
           _status = '已取消';
@@ -157,7 +156,6 @@ class _UploadTestPageState extends State<UploadTestPage> {
         return;
       }
 
-      // 创建队列任务（使用时间戳+随机数保证唯一性）。
       if (!sessionManager.hasActiveSession) {
         setState(() {
           _isUploading = false;
@@ -165,75 +163,99 @@ class _UploadTestPageState extends State<UploadTestPage> {
         });
         return;
       }
-      final taskId = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
+      final total = images.length;
       final currentSessionId = sessionManager.activeSessionId;
-      task = UploadTask(
-        id: taskId,
-        sessionId: currentSessionId,
-        filePath: image.path,
-        uploadOriginal: _uploadOriginal,
-        status: UploadStatus.pending,
-        createdAt: DateTime.now(),
-      );
-      await taskQueueRepository.add(task);
+      var successCount = 0;
+      var failedCount = 0;
+      String? firstThumbUrl;
+      String? firstOriginalUrl;
+      Uint8List? firstPreview;
 
-      setState(() => _status = '处理图片（后台，不卡界面）…');
-      final originalBytes = await File(image.path).readAsBytes();
-      final processed =
-          await compute(processPickedImageForUpload, originalBytes);
-      if (!mounted) return;
+      for (var i = 0; i < total; i++) {
+        final image = images[i];
+        task = null;
+        try {
+          // 创建队列任务（使用时间戳+随机数保证唯一性）。
+          final taskId = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
+          task = UploadTask(
+            id: taskId,
+            sessionId: currentSessionId,
+            filePath: image.path,
+            uploadOriginal: _uploadOriginal,
+            status: UploadStatus.pending,
+            createdAt: DateTime.now(),
+          );
+          await taskQueueRepository.add(task);
 
-      // 更新状态为上传中。
-      task.status = UploadStatus.uploading;
-      await taskQueueRepository.update(task);
+          if (mounted) {
+            setState(() => _status = '处理中（${i + 1}/$total）…');
+          }
+          final originalBytes = await File(image.path).readAsBytes();
+          final processed = await compute(processPickedImageForUpload, originalBytes);
+          if (!mounted) return;
 
-      setState(() {
-        _previewJpeg = processed.preview;
-        _status = '图片已就绪，开始上传…';
-      });
+          // 更新状态为上传中。
+          task.status = UploadStatus.uploading;
+          await taskQueueRepository.update(task);
 
-      final thumbnailBytes = processed.thumb;
+          firstPreview ??= processed.preview;
+          setState(() {
+            _previewJpeg = processed.preview;
+            _status = '上传缩略图（${i + 1}/$total）…';
+          });
 
-      setState(() => _status = '上传缩略图到 COS…');
-      final thumbKey = sessionManager.thumbKey(taskId);
-      await cosClient.putObjectWithFileDataOrThrow(thumbKey, thumbnailBytes);
+          final thumbnailBytes = processed.thumb;
+          final thumbKey = sessionManager.thumbKey(taskId);
+          await cosClient.putObjectWithFileDataOrThrow(thumbKey, thumbnailBytes);
+          final thumbUrl = cosObjectPublicUrl(_publicBaseUrl, thumbKey);
 
-      final thumbUrl = cosObjectPublicUrl(_publicBaseUrl, thumbKey);
+          String? originalUrl;
+          String? originalKey;
+          if (_uploadOriginal) {
+            originalKey = sessionManager.originalKey(taskId);
+            if (mounted) {
+              setState(() => _status = '上传原图（${i + 1}/$total）…');
+            }
+            await cosClient.putObjectOrThrow(originalKey, image.path);
+            originalUrl = cosObjectPublicUrl(_publicBaseUrl, originalKey);
+          }
 
-      String? originalUrl;
-      String? originalKey;
-      if (_uploadOriginal) {
-        originalKey = sessionManager.originalKey(taskId);
-        setState(() => _status = '上传原图到 COS…');
-        await cosClient.putObjectOrThrow(originalKey, image.path);
-        originalUrl = cosObjectPublicUrl(_publicBaseUrl, originalKey);
+          task.thumbKey = thumbKey;
+          task.originalKey = originalKey;
+          task.status = UploadStatus.success;
+          await taskQueueRepository.update(task);
+
+          successCount++;
+          firstThumbUrl ??= thumbUrl;
+          firstOriginalUrl ??= originalUrl;
+        } catch (e, st) {
+          debugPrint('[trip_photo_test] 第${i + 1}张上传失败: $e');
+          debugPrint('$st');
+          failedCount++;
+          if (task != null) {
+            task.status = UploadStatus.failed;
+            task.errorMessage = e.toString();
+            task.retryCount++;
+            await taskQueueRepository.update(task);
+          }
+        }
       }
 
-      // 上传成功，更新队列任务。
-      task.thumbKey = thumbKey;
-      task.originalKey = originalKey;
-      task.status = UploadStatus.success;
-      await taskQueueRepository.update(task);
       notifyTaskQueueRefresh();
-
+      if (!mounted) return;
       setState(() {
-        _thumbnailUrl = thumbUrl;
-        _originalUrl = originalUrl;
+        _thumbnailUrl = firstThumbUrl;
+        _originalUrl = firstOriginalUrl;
+        _previewJpeg = firstPreview ?? _previewJpeg;
         _isUploading = false;
-        _status = '上传完成';
+        _status = failedCount == 0
+            ? '上传完成：共 $successCount 张'
+            : '上传完成：成功 $successCount 张，失败 $failedCount 张';
       });
-      unawaited(_runReadChecks());
-    } catch (e, st) {
-      debugPrint('[trip_photo_test] COS 失败: $e');
-      debugPrint('$st');
-
-      // 上传失败，更新队列任务。
-      task?.status = UploadStatus.failed;
-      task?.errorMessage = e.toString();
-      task?.retryCount++;
-      await taskQueueRepository.update(task!);
-      notifyTaskQueueRefresh();
-
+      if (successCount > 0 && _thumbnailUrl != null) {
+        unawaited(_runReadChecks());
+      }
+    } catch (e, _) {
       if (!mounted) return;
       setState(() {
         _isUploading = false;
@@ -378,7 +400,7 @@ class _UploadTestPageState extends State<UploadTestPage> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.cloud_upload_rounded),
-                label: Text(_isUploading ? '处理中…' : '选图并上传到 COS'),
+                label: Text(_isUploading ? '处理中…' : '多选并上传到 COS'),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
                   padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
