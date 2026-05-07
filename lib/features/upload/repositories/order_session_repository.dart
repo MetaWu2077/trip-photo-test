@@ -5,10 +5,25 @@ import '../models/order_session.dart';
 class OrderSessionRepository {
   static const String _boxName = 'order_sessions';
   Box<OrderSession>? _box;
+  Future<void>? _initFuture;
 
-  Future<void> init() async {
-    Hive.registerAdapter(OrderStatusAdapter());
-    Hive.registerAdapter(OrderSessionAdapter());
+  Future<void> init() {
+    if (_box != null && _box!.isOpen) return Future.value();
+    _initFuture ??= _doInit();
+    return _initFuture!;
+  }
+
+  Future<void> _doInit() async {
+    if (!Hive.isAdapterRegistered(2)) {
+      Hive.registerAdapter(OrderStatusAdapter());
+    }
+    if (!Hive.isAdapterRegistered(3)) {
+      Hive.registerAdapter(OrderSessionAdapter());
+    }
+    if (Hive.isBoxOpen(_boxName)) {
+      _box = Hive.box<OrderSession>(_boxName);
+      return;
+    }
     _box = await Hive.openBox<OrderSession>(_boxName);
   }
 
