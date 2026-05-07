@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,10 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../cos/cos_shared.dart';
 import '../../image/pipeline.dart';
+import 'models/upload_task.dart';
+import 'repositories/task_queue_repository.dart';
+import 'session_manager.dart';
+import 'task_queue_notifier.dart';
 
 class UploadTestPage extends StatefulWidget {
   const UploadTestPage({super.key});
@@ -109,6 +114,9 @@ class _UploadTestPageState extends State<UploadTestPage> {
       _previewJpeg = null;
     });
 
+    // task 声明在 try 外面，供 catch 块访问。
+    UploadTask? task;
+
     try {
       if (cosEnv('COS_SECRET_ID').isEmpty ||
           cosEnv('COS_SECRET_KEY').isEmpty ||
@@ -149,11 +157,36 @@ class _UploadTestPageState extends State<UploadTestPage> {
         return;
       }
 
+      // 创建队列任务（使用时间戳+随机数保证唯一性）。
+      if (!sessionManager.hasActiveSession) {
+        setState(() {
+          _isUploading = false;
+          _status = '失败: 当前没有进行中的订单。\n请先在"订单"标签页选择一个订单开始拍摄。';
+        });
+        return;
+      }
+      final taskId = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
+      final currentSessionId = sessionManager.activeSessionId;
+      task = UploadTask(
+        id: taskId,
+        sessionId: currentSessionId,
+        filePath: image.path,
+        uploadOriginal: _uploadOriginal,
+        status: UploadStatus.pending,
+        createdAt: DateTime.now(),
+      );
+      await taskQueueRepository.add(task);
+
       setState(() => _status = '处理图片（后台，不卡界面）…');
       final originalBytes = await File(image.path).readAsBytes();
       final processed =
           await compute(processPickedImageForUpload, originalBytes);
       if (!mounted) return;
+
+      // 更新状态为上传中。
+      task.status = UploadStatus.uploading;
+      await taskQueueRepository.update(task);
+
       setState(() {
         _previewJpeg = processed.preview;
         _status = '图片已就绪，开始上传…';
@@ -161,20 +194,27 @@ class _UploadTestPageState extends State<UploadTestPage> {
 
       final thumbnailBytes = processed.thumb;
 
-      final ts = DateTime.now().millisecondsSinceEpoch;
-      final thumbKey = 'test/thumb_$ts.jpg';
       setState(() => _status = '上传缩略图到 COS…');
+      final thumbKey = sessionManager.thumbKey(taskId);
       await cosClient.putObjectWithFileDataOrThrow(thumbKey, thumbnailBytes);
 
       final thumbUrl = cosObjectPublicUrl(_publicBaseUrl, thumbKey);
 
       String? originalUrl;
+      String? originalKey;
       if (_uploadOriginal) {
-        final originalKey = 'test/original_$ts.jpg';
+        originalKey = sessionManager.originalKey(taskId);
         setState(() => _status = '上传原图到 COS…');
         await cosClient.putObjectOrThrow(originalKey, image.path);
         originalUrl = cosObjectPublicUrl(_publicBaseUrl, originalKey);
       }
+
+      // 上传成功，更新队列任务。
+      task.thumbKey = thumbKey;
+      task.originalKey = originalKey;
+      task.status = UploadStatus.success;
+      await taskQueueRepository.update(task);
+      notifyTaskQueueRefresh();
 
       setState(() {
         _thumbnailUrl = thumbUrl;
@@ -186,6 +226,14 @@ class _UploadTestPageState extends State<UploadTestPage> {
     } catch (e, st) {
       debugPrint('[trip_photo_test] COS 失败: $e');
       debugPrint('$st');
+
+      // 上传失败，更新队列任务。
+      task?.status = UploadStatus.failed;
+      task?.errorMessage = e.toString();
+      task?.retryCount++;
+      await taskQueueRepository.update(task!);
+      notifyTaskQueueRefresh();
+
       if (!mounted) return;
       setState(() {
         _isUploading = false;

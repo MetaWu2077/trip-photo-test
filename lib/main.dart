@@ -5,11 +5,12 @@ import 'cos/cos_shared.dart';
 import 'features/sony/sony_wifi_upload_page.dart';
 import 'features/upload/upload_page.dart';
 import 'features/upload/repositories/task_queue_repository.dart';
+import 'features/upload/repositories/order_session_repository.dart';
+import 'features/upload/order_page.dart';
 import 'features/upload/task_queue_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // 必须把 cos.local.env 写在 pubspec.yaml 的 assets 里，Android/iOS 才能读到（仅靠磁盘路径无效）。
   await dotenv.load(fileName: 'cos.local.env', isOptional: true);
   tryLoadCosLocalEnvFromDisk();
   if (cosEnv('COS_BUCKET').isEmpty || cosEnv('COS_REGION').isEmpty) {
@@ -18,8 +19,10 @@ void main() async {
       '或用 launch.json / --dart-define-from-file 编译注入。',
     );
   }
-  // 初始化 Hive 持久化（任务队列依赖）。
+  // 初始化 Hive 持久化。
   await taskQueueRepository.init();
+  await orderSessionRepository.init();
+  await orderSessionRepository.ensureMockOrders();
   runApp(const MyApp());
 }
 
@@ -36,7 +39,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF006B7D)),
       ),
       home: DefaultTabController(
-        length: 3,
+        length: 4,
         child: Scaffold(
           appBar: AppBar(
             title: const Text('旅拍 COS'),
@@ -45,6 +48,7 @@ class MyApp extends StatelessWidget {
                 Tab(icon: Icon(Icons.photo_library_outlined), text: '相册上传'),
                 Tab(icon: Icon(Icons.wifi_tethering), text: '索尼 WiFi'),
                 Tab(icon: Icon(Icons.queue_rounded), text: '任务队列'),
+                Tab(icon: Icon(Icons.list_alt_rounded), text: '订单'),
               ],
             ),
           ),
@@ -53,6 +57,7 @@ class MyApp extends StatelessWidget {
               UploadTestPage(),
               SonyWifiUploadPage(),
               TaskQueuePage(),
+              OrderPage(),
             ],
           ),
         ),

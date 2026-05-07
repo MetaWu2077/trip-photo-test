@@ -8,7 +8,7 @@
 关联计划：opc-harness/plans/active/2026-05-05-trip-photo-baseline-hardening.md
 关联产品文档：products/trip-photo-test/status.md, roadmap.md
 关联 checklist：dev/upload-pipeline-checklist.md
-当前：阶段 A 步骤 4 完成，步骤 5 待开始
+当前：阶段 A 步骤 5 完成，待提交 PR
 验证命令：flutter analyze
 
 ## 步骤 4 决策记录
@@ -39,3 +39,13 @@
   - `lib/features/upload/task_queue_page.dart`
   - `lib/features/upload/upload_retry.dart`
 - 修改文件：`lib/main.dart`（init）, `lib/features/upload/upload_page.dart`（队列集成）, `pubspec.yaml`（hive 依赖）
+
+## 2026-05-06 EXIT — 步骤 5 完成（COS Path Spec + Session 架构）
+- 新增 OrderSession 模型 + OrderSessionRepository（Hive 持久化）
+- SessionManager 管理当前活跃 session，内存级单例
+- COS 路径规范：`thumb/{orderId}/{taskId}.jpg` 和 `original/{orderId}/{taskId}.jpg`
+- 新增"订单"Tab：模拟预约订单列表，点击"开始拍摄"激活 session，"结束拍摄"关闭
+- UploadTask 增加 sessionId 字段，关联订单
+- 相册上传 Tab 必须先选订单才能拍照上传（未选订单时提示先选）
+- App 启动时自动填充 3 条模拟订单（李女士/张先生/王小姐）
+- Tab 数量从 3 增加到 4

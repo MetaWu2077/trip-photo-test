@@ -62,15 +62,18 @@ class UploadTaskAdapter extends TypeAdapter<UploadTask> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
+    // sessionId 在旧数据中不存在，降级兼容。
+    final sessionId = fields[9] as String? ?? '';
     return UploadTask(
       id: fields[0] as String,
+      sessionId: sessionId,
       filePath: fields[1] as String,
       uploadOriginal: fields[2] as bool,
       thumbKey: fields[3] as String?,
       originalKey: fields[4] as String?,
       status: fields[5] as UploadStatus,
       createdAt: fields[6] as DateTime,
-      retryCount: fields[7] as int,
+      retryCount: fields[7] as int? ?? 0,
       errorMessage: fields[8] as String?,
     );
   }
@@ -78,24 +81,26 @@ class UploadTaskAdapter extends TypeAdapter<UploadTask> {
   @override
   void write(BinaryWriter writer, UploadTask obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.filePath)
+      ..write(obj.sessionId)
       ..writeByte(2)
-      ..write(obj.uploadOriginal)
+      ..write(obj.filePath)
       ..writeByte(3)
-      ..write(obj.thumbKey)
+      ..write(obj.uploadOriginal)
       ..writeByte(4)
-      ..write(obj.originalKey)
+      ..write(obj.thumbKey)
       ..writeByte(5)
-      ..write(obj.status)
+      ..write(obj.originalKey)
       ..writeByte(6)
-      ..write(obj.createdAt)
+      ..write(obj.status)
       ..writeByte(7)
-      ..write(obj.retryCount)
+      ..write(obj.createdAt)
       ..writeByte(8)
+      ..write(obj.retryCount)
+      ..writeByte(9)
       ..write(obj.errorMessage);
   }
 

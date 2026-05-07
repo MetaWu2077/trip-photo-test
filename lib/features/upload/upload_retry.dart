@@ -41,13 +41,14 @@ Future<void> retryUploadTask(String taskId) async {
     final processed = await compute(processPickedImageForUpload, originalBytes);
     final thumbnailBytes = processed.thumb;
 
-    final ts = DateTime.now().millisecondsSinceEpoch;
-    final thumbKey = 'test/thumb_$ts.jpg';
+    // 使用任务关联的 sessionId 拼接 COS 路径。
+    final sid = task.sessionId.isNotEmpty ? task.sessionId : 'no-session';
+    final thumbKey = 'thumb/$sid/${taskId}.jpg';
     await cosClient.putObjectWithFileDataOrThrow(thumbKey, thumbnailBytes);
 
     String? originalKey;
     if (task.uploadOriginal) {
-      originalKey = 'test/original_$ts.jpg';
+      originalKey = 'original/$sid/${taskId}.jpg';
       await cosClient.putObjectOrThrow(originalKey, task.filePath);
     }
 
