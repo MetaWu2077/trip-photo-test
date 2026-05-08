@@ -34,7 +34,7 @@ function q(sql, params = []) {
   });
 }
 
-// 懒初始化：表不存在则自动创建
+// 懒初始化：表不存在则自动创建（每次冷启动都尝试，幂等安全）
 async function ensureTables() {
   await q(`CREATE TABLE IF NOT EXISTS photos (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -73,14 +73,6 @@ async function ensureTables() {
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 }
 
-let _tablesEnsured = false;
-async function ensureTablesOnce() {
-  if (!_tablesEnsured) {
-    try { await ensureTables(); } catch (_) {}
-    _tablesEnsured = true;
-  }
-}
-
 function sendJson(status, data) {
   return {
     statusCode: status,
@@ -103,7 +95,7 @@ function nowStr() {
 }
 
 exports.main = async (event, context) => {
-  await ensureTablesOnce();
+  await ensureTables();
 
   // CloudBase HTTP Service 会传递完整路径（已剥离 /trip-api 前缀）
   let path = event.path || '';
