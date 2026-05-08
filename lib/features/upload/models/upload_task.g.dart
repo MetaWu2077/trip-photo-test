@@ -62,19 +62,44 @@ class UploadTaskAdapter extends TypeAdapter<UploadTask> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
+    T _field<T>(Map<int, dynamic> fields, int key, T defaultValue) {
+      final v = fields[key];
+      if (v is T) return v;
+      return defaultValue;
+    }
     // sessionId 在旧数据中不存在，降级兼容。
-    final sessionId = fields[9] as String? ?? '';
+    final sessionId = _field<String>(fields, 9, '');
+    // uploadOriginal 旧数据可能存为 "true"/"false" 字符串，防御性转换。
+    final uploadOriginalRaw = fields[2];
+    bool uploadOriginal;
+    if (uploadOriginalRaw is bool) {
+      uploadOriginal = uploadOriginalRaw;
+    } else if (uploadOriginalRaw is String) {
+      uploadOriginal = uploadOriginalRaw == 'true';
+    } else {
+      uploadOriginal = false;
+    }
+    // 兼容 status 字段旧数据中可能为 int/string/bool。
+    final statusRaw = fields[5];
+    UploadStatus status;
+    if (statusRaw is UploadStatus) {
+      status = statusRaw;
+    } else if (statusRaw is int) {
+      status = UploadStatus.values[statusRaw.clamp(0, UploadStatus.values.length - 1)];
+    } else {
+      status = UploadStatus.pending;
+    }
     return UploadTask(
-      id: fields[0] as String,
+      id: _field<String>(fields, 0, ''),
       sessionId: sessionId,
-      filePath: fields[1] as String,
-      uploadOriginal: fields[2] as bool,
-      thumbKey: fields[3] as String?,
-      originalKey: fields[4] as String?,
-      status: fields[5] as UploadStatus,
-      createdAt: fields[6] as DateTime,
-      retryCount: fields[7] as int? ?? 0,
-      errorMessage: fields[8] as String?,
+      filePath: _field<String>(fields, 1, ''),
+      uploadOriginal: uploadOriginal,
+      thumbKey: _field<String?>(fields, 3, null),
+      originalKey: _field<String?>(fields, 4, null),
+      status: status,
+      createdAt: _field<DateTime?>(fields, 6, null) ?? DateTime.now(),
+      retryCount: _field<int>(fields, 7, 0),
+      errorMessage: _field<String?>(fields, 8, null),
     );
   }
 

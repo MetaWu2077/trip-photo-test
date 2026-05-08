@@ -96,15 +96,30 @@ class OrderSessionAdapter extends TypeAdapter<OrderSession> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
+    T _field<T>(Map<int, dynamic> fields, int key, T defaultValue) {
+      final v = fields[key];
+      if (v is T) return v;
+      return defaultValue;
+    }
+    // 兼容 status 字段旧数据中可能为 int/string/bool。
+    final statusRaw = fields[3];
+    OrderStatus status;
+    if (statusRaw is OrderStatus) {
+      status = statusRaw;
+    } else if (statusRaw is int) {
+      status = OrderStatus.values[statusRaw.clamp(0, OrderStatus.values.length - 1)];
+    } else {
+      status = OrderStatus.pending;
+    }
     return OrderSession(
-      id: fields[0] as String,
-      customerName: fields[1] as String,
-      location: fields[2] as String,
-      status: fields[3] as OrderStatus,
-      startedAt: fields[4] as DateTime?,
-      endedAt: fields[5] as DateTime?,
-      createdAt: fields[6] as DateTime,
-      phoneLast4: fields[7] as String? ?? '',
+      id: _field<String>(fields, 0, ''),
+      customerName: _field<String>(fields, 1, ''),
+      location: _field<String>(fields, 2, ''),
+      status: status,
+      startedAt: _field<DateTime?>(fields, 4, null),
+      endedAt: _field<DateTime?>(fields, 5, null),
+      createdAt: _field<DateTime?>(fields, 6, null) ?? DateTime.now(),
+      phoneLast4: _field<String>(fields, 7, ''),
     );
   }
 
