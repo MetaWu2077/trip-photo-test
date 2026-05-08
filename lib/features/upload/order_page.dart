@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'models/order_session.dart';
-import 'repositories/order_session_repository.dart';
-import 'session_manager.dart';
+import '../../cloudbase/cloudbase_client.dart';
+import '../../cloudbase/models/cloud_session.dart';
+import '../../cloudbase/repositories/cloud_session_repository.dart';
+import '../customer/customer_selector_dialog.dart';
 import 'task_queue_notifier.dart';
-import 'order_detail_page.dart';
 
-/// 订单 Tab：模拟的预约订单列表，点击后开始对应拍摄 session。
+/// 订单 Tab：云端会话列表，点击后开始/结束对应拍摄 session。
 class OrderPage extends StatefulWidget {
   const OrderPage({super.key});
 
@@ -14,76 +14,134 @@ class OrderPage extends StatefulWidget {
 }
 
 class _OrderPageState extends State<OrderPage> {
-  List<OrderSession> _orders = [];
+  final _sessionRepo = CloudSessionRepository();
+
+  List<CloudSession> _sessions = [];
+  bool _loading = false;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadOrders();
+    _load();
   }
 
-  void _loadOrders() {
-    setState(() => _orders = orderSessionRepository.getAll());
-  }
-
-  Future<void> _startOrder(OrderSession order) async {
+  Future<void> _load() async {
+    final userId = CloudBaseClient.instance.currentUserId;
+    if (userId == null || userId <= 0) return;
+    setState(() { _loading = true; _error = null; });
     try {
-      await sessionManager.startSession(order.id);
-      _loadOrders();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('开始拍摄：${order.customerName}（${order.location}）'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      taskQueueChangeNotifier.refresh();
+      final list = await _sessionRepo.getSessions(userId);
+      setState(() { _sessions = list; _loading = false; });
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('启动失败：$e'), behavior: SnackBarBehavior.floating),
-      );
+      setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
-  Future<void> _endOrder() async {
-    await sessionManager.endSession();
-    _loadOrders();
-    taskQueueChangeNotifier.refresh();
+  Future<void> _createAndStartSession() async {
+    // 先选客户
+    final customer = await showCustomerSelectorDialog(context);
+    final userId = CloudBaseClient.instance.currentUserId;
+    if (userId == null || !mounted) return;
+
+    // 创建 session 并直接 start
+    final sessionId = await _sessionRepo.createSession(
+      userId: userId,
+      customerId: customer?.id,
+      cosDirPrefix: customer?.name ?? 'unknown',
+      status: 'active',
+    );
+    if (sessionId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('创建订单失败'), behavior: SnackBarBehavior.floating),
+      );
+      return;
+    }
+    await _load();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('当前订单已结束'),
+      SnackBar(
+        content: Text('开始拍摄：${customer?.name ?? '新订单'}'),
         behavior: SnackBarBehavior.floating,
       ),
     );
+    taskQueueChangeNotifier.refresh();
   }
 
-  String _statusIcon(OrderStatus status) {
+  Future<void> _startSession(CloudSession session) async {
+    final ok = await _sessionRepo.startSession(session.id);
+    if (!ok) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('启动失败'), behavior: SnackBarBehavior.floating),
+      );
+      return;
+    }
+    await _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('开始拍摄：${session.customerName ?? '订单${session.id}'}'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    taskQueueChangeNotifier.refresh();
+  }
+
+  Future<void> _endSession(CloudSession session) async {
+    final ok = await _sessionRepo.completeSession(session.id);
+    if (!ok) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('结束失败'), behavior: SnackBarBehavior.floating),
+      );
+      return;
+    }
+    await _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('当前订单已结束'), behavior: SnackBarBehavior.floating),
+    );
+    taskQueueChangeNotifier.refresh();
+  }
+
+  String _statusIcon(CloudSessionStatus status) {
     switch (status) {
-      case OrderStatus.pending:
+      case CloudSessionStatus.pending:
         return '📋';
-      case OrderStatus.active:
+      case CloudSessionStatus.active:
         return '📷';
-      case OrderStatus.completed:
+      case CloudSessionStatus.completed:
         return '✅';
+    }
+  }
+
+  String _statusLabel(CloudSessionStatus status) {
+    switch (status) {
+      case CloudSessionStatus.pending:
+        return '待开始';
+      case CloudSessionStatus.active:
+        return '进行中';
+      case CloudSessionStatus.completed:
+        return '已完成';
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final activeOrder = sessionManager.activeSession;
-    final pendingCount = _orders.where((o) => o.status == OrderStatus.pending).length;
-    final activeCount = _orders.where((o) => o.status == OrderStatus.active).length;
-    final completedCount = _orders.where((o) => o.status == OrderStatus.completed).length;
+    final activeSessions = _sessions.where((s) => s.status == CloudSessionStatus.active).toList();
+    final pendingCount = _sessions.where((s) => s.status == CloudSessionStatus.pending).length;
+    final activeCount = activeSessions.length;
+    final completedCount = _sessions.where((s) => s.status == CloudSessionStatus.completed).length;
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             // 当前进行中的 session 提示栏
-            if (activeOrder != null)
+            if (activeSessions.isNotEmpty)
               Container(
                 width: double.infinity,
                 color: scheme.primaryContainer,
@@ -97,18 +155,19 @@ class _OrderPageState extends State<OrderPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '进行中：${activeOrder.customerName}',
+                            '进行中：${activeSessions.first.customerName ?? '订单${activeSessions.first.id}'}',
                             style: TextStyle(fontWeight: FontWeight.bold, color: scheme.onPrimaryContainer),
                           ),
-                          Text(
-                            activeOrder.location,
-                            style: TextStyle(fontSize: 12, color: scheme.onPrimaryContainer.withValues(alpha: 0.7)),
-                          ),
+                          if (activeSessions.length > 1)
+                            Text(
+                              '还有 ${activeSessions.length - 1} 个进行中',
+                              style: TextStyle(fontSize: 12, color: scheme.onPrimaryContainer.withValues(alpha: 0.7)),
+                            ),
                         ],
                       ),
                     ),
                     OutlinedButton(
-                      onPressed: _endOrder,
+                      onPressed: () => _endSession(activeSessions.first),
                       style: OutlinedButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                       child: const Text('结束拍摄'),
                     ),
@@ -125,60 +184,76 @@ class _OrderPageState extends State<OrderPage> {
                   _StatChip(label: '进行中', value: '$activeCount', color: scheme.primary),
                   const SizedBox(width: 8),
                   _StatChip(label: '已完成', value: '$completedCount', color: Colors.green),
+                  const Spacer(),
+                  OutlinedButton.icon(
+                    onPressed: _createAndStartSession,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('新建订单'),
+                  ),
                 ],
               ),
             ),
             const Divider(height: 1),
             // 订单列表
             Expanded(
-              child: _orders.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.list_alt_rounded, size: 48, color: scheme.outline),
-                          const SizedBox(height: 8),
-                          Text('暂无预约订单', style: TextStyle(color: scheme.outline)),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _orders.length,
-                      itemBuilder: (context, index) {
-                        final order = _orders[index];
-                        final isClickable = order.status == OrderStatus.completed;
-                        return InkWell(
-                          onTap: isClickable
-                              ? () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => OrderDetailPage(order: order),
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null && _sessions.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.cloud_off_rounded, size: 48, color: Colors.grey[400]),
+                              const SizedBox(height: 8),
+                              Text(_error!, style: TextStyle(color: Colors.grey[600]), textAlign: TextAlign.center),
+                              const SizedBox(height: 12),
+                              OutlinedButton(onPressed: _load, child: const Text('重试')),
+                            ],
+                          ),
+                        )
+                      : _sessions.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.list_alt_rounded, size: 48, color: scheme.outline),
+                                  const SizedBox(height: 8),
+                                  Text('暂无订单', style: TextStyle(color: scheme.outline)),
+                                  const SizedBox(height: 4),
+                                  Text('点击右上角新建', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+                                ],
+                              ),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: _load,
+                              child: ListView.builder(
+                                itemCount: _sessions.length,
+                                itemBuilder: (context, index) {
+                                  final session = _sessions[index];
+                                  return ListTile(
+                                    leading: Text(_statusIcon(session.status), style: const TextStyle(fontSize: 20)),
+                                    title: Text(session.customerName ?? '订单 #${session.id}'),
+                                    subtitle: Text(
+                                      [
+                                        if (session.cosDirPrefix != null && session.cosDirPrefix!.isNotEmpty) session.cosDirPrefix!,
+                                        _statusLabel(session.status),
+                                      ].join(' · '),
+                                      style: TextStyle(
+                                        color: session.status == CloudSessionStatus.active ? scheme.primary : null,
+                                      ),
                                     ),
+                                    trailing: session.status == CloudSessionStatus.pending
+                                        ? FilledButton.tonal(
+                                            onPressed: () => _startSession(session),
+                                            child: const Text('开始拍摄'),
+                                          )
+                                        : session.status == CloudSessionStatus.active
+                                            ? const Icon(Icons.camera_alt_rounded, color: Colors.green)
+                                            : const Icon(Icons.chevron_right_rounded),
                                   );
-                                }
-                              : null,
-                          child: ListTile(
-                            leading: Text(_statusIcon(order.status), style: const TextStyle(fontSize: 20)),
-                            title: Text(order.customerName),
-                            subtitle: Text(
-                              '${order.location} · ${order.statusLabel}',
-                              style: TextStyle(
-                                color: order.status == OrderStatus.active ? scheme.primary : null,
+                                },
                               ),
                             ),
-                            trailing: order.status == OrderStatus.pending
-                                ? FilledButton.tonal(
-                                    onPressed: () => _startOrder(order),
-                                    child: const Text('开始拍摄'),
-                                  )
-                                : order.status == OrderStatus.active
-                                    ? const Icon(Icons.camera_alt_rounded, color: Colors.green)
-                                    : const Icon(Icons.chevron_right_rounded),
-                          ),
-                        );
-                      },
-                    ),
             ),
           ],
         ),
