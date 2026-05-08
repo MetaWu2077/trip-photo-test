@@ -8,6 +8,8 @@ import 'features/upload/repositories/task_queue_repository.dart';
 import 'features/upload/repositories/order_session_repository.dart';
 import 'features/upload/order_page.dart';
 import 'features/upload/task_queue_page.dart';
+import 'features/customer/customer_management_page.dart';
+import 'features/work/work_shift_page.dart';
 import 'cloudbase/auth/auth_state.dart';
 import 'cloudbase/cloudbase_client.dart';
 import 'cloudbase/repositories/cloud_user_repository.dart';
@@ -205,7 +207,7 @@ class _MyAppState extends State<MyApp> {
   Widget _buildMainApp() {
     return Builder(
       builder: (pageContext) => DefaultTabController(
-        length: 4,
+        length: 5,
         child: Scaffold(
           appBar: AppBar(
             title: Text(
@@ -230,6 +232,7 @@ class _MyAppState extends State<MyApp> {
                 Tab(icon: Icon(Icons.wifi_tethering), text: '索尼 WiFi'),
                 Tab(icon: Icon(Icons.queue_rounded), text: '任务队列'),
                 Tab(icon: Icon(Icons.list_alt_rounded), text: '订单'),
+                Tab(icon: Icon(Icons.access_time_rounded), text: '上工'),
               ],
             ),
           ),
@@ -239,6 +242,7 @@ class _MyAppState extends State<MyApp> {
               SonyWifiUploadPage(),
               TaskQueuePage(),
               OrderPage(),
+              WorkShiftPage(),
             ],
           ),
         ),
