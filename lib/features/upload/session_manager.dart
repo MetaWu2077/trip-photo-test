@@ -1,68 +1,105 @@
 import 'package:flutter/foundation.dart';
-import 'models/order_session.dart';
-import 'repositories/order_session_repository.dart';
+import '../../cloudbase/cloudbase_client.dart';
+import '../../cloudbase/models/cloud_session.dart';
+import '../../cloudbase/repositories/cloud_session_repository.dart';
 
 /// 当前活跃 Session 管理器（内存级，APP 级别单例）。
-/// 管理"当前正在拍摄"的订单 session，关联所有上传任务路径。
+/// 统一使用云端 CloudSession。
 class SessionManager {
-  OrderSession? _activeSession;
+  static final SessionManager _instance = SessionManager._();
+  factory SessionManager() => _instance;
+  SessionManager._();
 
-  OrderSession? get activeSession => _activeSession;
+  final _sessionRepo = CloudSessionRepository();
+
+  /// 进行中的云端 CloudSession。
+  CloudSession? _activeSession;
+
+  CloudSession? get activeSession => _activeSession;
   bool get hasActiveSession => _activeSession != null;
-  String get activeSessionId => _activeSession?.id ?? '';
 
-  /// 开始一个 session（选定的订单进入"进行中"状态）。
-  Future<void> startSession(String orderId) async {
-    // 先结束当前 session。
-    if (_activeSession != null) {
-      await endSession();
-    }
-
-    final session = orderSessionRepository.getById(orderId);
-    if (session == null) {
-      throw StateError('订单不存在: $orderId');
-    }
-    session.status = OrderStatus.active;
-    session.startedAt = DateTime.now();
-    await orderSessionRepository.update(session);
+  /// 设置当前活跃 session（不创建，仅激活已有 session）。
+  Future<void> setActiveSession(CloudSession session) async {
+    await _sessionRepo.startSession(session.id);
     _activeSession = session;
-    debugPrint('[SessionManager] startSession: $orderId');
+    debugPrint('[SessionManager] setActiveSession: id=${session.id}');
   }
 
-  /// 结束当前 session。
+  /// 当前 CloudSession 的 int id（供 CloudPhotoRepository 用）。
+  int? get activeCloudSessionId => _activeSession?.id;
+
+  /// 当前 Session 的 String id（供 COS 路径等兼容用）。
+  String get activeSessionId => _activeSession?.id.toString() ?? '';
+
+  /// 当前客户名（供 COS 路径等用）。
+  String get activeCustomerName => _activeSession?.customerName ?? 'unknown';
+
+  /// 启动（创建）一个新的云端 session 并设为当前活跃。
+  /// [customerId] 可选（有客户时传入，无客户则为 null）。
+  /// [shiftId] 可选（关联上工班次）。
+  Future<void> startSession({int? customerId, int? shiftId}) async {
+    await _clearActive();
+
+    final userId = CloudBaseClient.instance.currentUserId;
+    if (userId == null) {
+      throw StateError('未登录，无 userId');
+    }
+
+    final sessionId = await _sessionRepo.createSession(
+      userId: userId,
+      customerId: customerId,
+      shiftId: shiftId,
+      status: 'active',
+    );
+    if (sessionId == null) {
+      throw StateError('创建 CloudSession 失败');
+    }
+
+    // 重新查询以获取完整对象（含 customerName 左连接结果）。
+    final sessions = await _sessionRepo.getSessions(userId);
+    _activeSession = sessions.where((s) => s.id == sessionId).firstOrNull;
+    debugPrint('[SessionManager] startSession: id=$sessionId, shiftId=$shiftId, customer=${_activeSession?.customerName}');
+  }
+
+  /// 结束当前活跃的 session。
   Future<void> endSession() async {
     if (_activeSession == null) return;
-    final session = _activeSession!;
-    session.status = OrderStatus.completed;
-    session.endedAt = DateTime.now();
-    await orderSessionRepository.update(session);
-    debugPrint('[SessionManager] endSession: ${session.id}');
+    final sessionId = _activeSession!.id;
+    await _sessionRepo.completeSession(sessionId);
+    debugPrint('[SessionManager] endSession: id=$sessionId');
     _activeSession = null;
   }
 
-  /// 当前 session 的 COS 目录名：手机后四位 + 订单日期时间。
-  /// 格式：{phoneLast4}_{yyyyMMdd_HHmm}
-  String get cosDirName {
-    if (_activeSession == null) return 'no-session';
-    final s = _activeSession!;
-    final d = s.createdAt;
-    final padM = d.month < 10 ? '0${d.month}' : '${d.month}';
-    final padD = d.day < 10 ? '0${d.day}' : '${d.day}';
-    final padH = d.hour < 10 ? '0${d.hour}' : '${d.hour}';
-    final padMin = d.minute < 10 ? '0${d.minute}' : '${d.minute}';
-    return '${s.phoneLast4}_${d.year}$padM${padD}_$padH$padMin';
+  /// 从云端同步当前活跃 session 状态（App 重启后恢复）。
+  Future<void> restoreActive() async {
+    final userId = CloudBaseClient.instance.currentUserId;
+    if (userId == null) return;
+    _activeSession = await _sessionRepo.getActiveSession(userId);
+    debugPrint('[SessionManager] restoreActive: ${_activeSession?.id}');
   }
 
-  /// 获取当前 session 的 COS 上传根路径（不含文件名）。
-  /// 格式：thumb/{cosDirName}/ 或 original/{cosDirName}/
+  Future<void> _clearActive() async {
+    if (_activeSession != null) {
+      await endSession();
+    }
+  }
+
+  /// 当前 session 的 COS 目录名：客户名（无则 unknown）+ 日期时间。
+  String get cosDirName {
+    if (_activeSession == null) return 'no-session';
+    final d = _activeSession!.createdAt ?? DateTime.now();
+    final pad = (int v) => v < 10 ? '0$v' : '$v';
+    return '${activeCustomerName}_${d.year}${pad(d.month)}${pad(d.day)}_${pad(d.hour)}${pad(d.minute)}';
+  }
+
+  /// 缩略图 COS 上传路径。
   String thumbBasePath() => 'thumb/$cosDirName/';
   String originalBasePath() => 'original/$cosDirName/';
 
-  /// 上传时拼接完整的 COS object key。
-  /// [photoId] 使用任务 ID 简化处理。
+  /// 完整的 COS object key。
   String thumbKey(String photoId) => '${thumbBasePath()}$photoId.jpg';
   String originalKey(String photoId) => '${originalBasePath()}$photoId.jpg';
 }
 
-/// 全局单例（APP 级别）。
+/// 全局单例。
 final sessionManager = SessionManager();

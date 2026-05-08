@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../cloudbase/cloudbase_client.dart';
 import '../../cloudbase/repositories/cloud_shift_repository.dart';
+import '../upload/session_manager.dart';
 
 /// 上工/收工页面。
 class WorkShiftPage extends StatefulWidget {
@@ -46,6 +47,10 @@ class _WorkShiftPageState extends State<WorkShiftPage> {
     }
     // 检查服务器端是否还有未收工班次
     final active = await _repo.getActiveShift(userId);
+    if (active != null) {
+      // 同步恢复 SessionManager 的活跃 session
+      await sessionManager.restoreActive();
+    }
     setState(() {
       _activeShift = active;
       _loading = false;
@@ -70,6 +75,14 @@ class _WorkShiftPageState extends State<WorkShiftPage> {
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyShiftId, shift.id);
+
+    // 同时创建一个关联该 shift 的 CloudSession（供整日拍摄使用）
+    try {
+      await sessionManager.startSession(shiftId: shift.id);
+    } catch (e) {
+      debugPrint('[WorkShift] startSession failed: $e');
+    }
+
     setState(() => _activeShift = shift);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -91,6 +104,10 @@ class _WorkShiftPageState extends State<WorkShiftPage> {
       ),
     );
     if (confirmed != true) return;
+
+    // 先结束关联的 CloudSession
+    await sessionManager.endSession();
+
     final updated = await _repo.clockOut(_activeShift!.id);
     if (!mounted) return;
     if (updated != null) {

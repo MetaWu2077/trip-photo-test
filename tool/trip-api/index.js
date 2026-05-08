@@ -71,6 +71,14 @@ async function ensureTables() {
     INDEX idx_user (user_id),
     INDEX idx_book_date (book_date)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
+  // sessions 表可能已存在但缺少 shift_id 列，尝试添加（幂等）
+  try {
+    const [cols] = await q(`SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'sessions' AND COLUMN_NAME = 'shift_id'`, [DB_NAME]);
+    if (cols.length === 0) {
+      await q(`ALTER TABLE sessions ADD COLUMN shift_id INT NULL AFTER customer_id`);
+    }
+  } catch (_) { /* 列可能已存在或 sessions 表尚未创建，静默忽略 */ }
 }
 
 function sendJson(status, data) {
@@ -198,11 +206,11 @@ exports.main = async (event, context) => {
   }
 
   if (method === 'POST' && path === '/sessions') {
-    const { userId, customerId, cosDirPrefix, status } = body;
+    const { userId, customerId, shiftId, cosDirPrefix, status } = body;
     const startedAt = status === 'active' ? nowStr() : null;
     const result = await q(
-      'INSERT INTO sessions (user_id, customer_id, cos_dir_prefix, status, started_at) VALUES (?, ?, ?, ?, ?)',
-      [Number(userId), customerId || null, cosDirPrefix || '', status || 'pending', startedAt]
+      'INSERT INTO sessions (user_id, customer_id, shift_id, cos_dir_prefix, status, started_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [Number(userId), customerId || null, shiftId || null, cosDirPrefix || '', status || 'pending', startedAt]
     );
     return sendJson(200, { id: result.insertId });
   }
@@ -212,6 +220,7 @@ exports.main = async (event, context) => {
     const fields = [], vals = [];
     if (body.status !== undefined) { fields.push('status = ?'); vals.push(body.status); }
     if (body.cosDirPrefix !== undefined) { fields.push('cos_dir_prefix = ?'); vals.push(body.cosDirPrefix); }
+    if (body.shiftId !== undefined) { fields.push('shift_id = ?'); vals.push(body.shiftId); }
     if (body.status === 'active' && body.startedAt === undefined) { fields.push('started_at = ?'); vals.push(nowStr()); }
     if (body.status === 'completed' && body.endedAt === undefined) { fields.push('ended_at = ?'); vals.push(nowStr()); }
     if (body.startedAt !== undefined) { fields.push('started_at = ?'); vals.push(body.startedAt); }
