@@ -40,6 +40,9 @@ class CloudBaseAuthClient {
 
       if (resp.statusCode != 200) {
         final body = _parseErrorBody(resp.body);
+        if (body != null && body.contains('用户已存在')) {
+          return AuthResult.failure('该手机号已注册，请直接登录（输入任意验证码即可登录）');
+        }
         return AuthResult.failure(body ?? '发送验证码失败 (${resp.statusCode})');
       }
 
@@ -177,6 +180,9 @@ class CloudBaseAuthClient {
 
       if (resp.statusCode != 200) {
         final body = _parseErrorBody(resp.body);
+        if (body != null && body.contains('用户已存在')) {
+          return AuthResult.failure('该手机号已注册，请直接登录（输入任意验证码即可登录）');
+        }
         return AuthResult.failure(body ?? '登录失败 (${resp.statusCode})');
       }
 
@@ -228,6 +234,10 @@ class CloudBaseAuthClient {
 
         if (resp.statusCode != 200) {
           final body = _parseErrorBody(resp.body);
+          // "用户已存在" = 手机号已注册，应直接跳 signin，不要重试
+          if (body != null && body.contains('用户已存在')) {
+            return AuthResult.failure('该手机号已注册，请直接登录');
+          }
           final mayUsernameConflict = body != null &&
               (body.contains('Username') ||
                   body.contains('username') ||
@@ -280,9 +290,16 @@ class CloudBaseAuthClient {
     try {
       final data = jsonDecode(body);
       if (data is Map) {
-        return data['error_description'] as String? ??
+        // 兼容 CloudBase Auth 常见错误格式
+        final topLevel = data['error_description'] as String? ??
             data['error'] as String? ??
             data['message'] as String?;
+        if (topLevel != null && topLevel.isNotEmpty) return topLevel;
+        // { "Error": { "Code": "...", "Message": "..." } }
+        final err = data['Error'] as Map?;
+        if (err != null) {
+          return (err['Message'] ?? err['Code'] ?? err['message'])?.toString();
+        }
       }
     } catch (_) {}
     return null;
