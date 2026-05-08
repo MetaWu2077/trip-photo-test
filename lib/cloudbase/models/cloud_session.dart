@@ -9,6 +9,7 @@ class CloudSession {
   final int id;
   final int userId;
   final int? customerId;
+  final int? shiftId;
   final String? cosDirPrefix;
   final CloudSessionStatus status;
   final DateTime? startedAt;
@@ -22,6 +23,7 @@ class CloudSession {
     required this.id,
     required this.userId,
     this.customerId,
+    this.shiftId,
     this.cosDirPrefix,
     this.status = CloudSessionStatus.pending,
     this.startedAt,
@@ -36,6 +38,7 @@ class CloudSession {
       id: json['id'] as int,
       userId: json['user_id'] as int,
       customerId: json['customer_id'] as int?,
+      shiftId: json['shift_id'] as int?,
       cosDirPrefix: json['cos_dir_prefix'] as String?,
       status: _parseStatus(json['status'] as String?),
       startedAt: _parseDateTime(json['started_at']),
@@ -51,6 +54,7 @@ class CloudSession {
       'id': id,
       'user_id': userId,
       'customer_id': customerId,
+      'shift_id': shiftId,
       'cos_dir_prefix': cosDirPrefix,
       'status': status.name,
       'started_at': startedAt?.toIso8601String(),

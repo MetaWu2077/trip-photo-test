@@ -9,6 +9,9 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../cloudbase/cloudbase_client.dart';
+import '../../cloudbase/repositories/cloud_photo_repository.dart';
+import '../../cloudbase/repositories/cloud_shift_repository.dart';
 import '../../cos/cos_shared.dart';
 import '../../image/pipeline.dart';
 import 'models/upload_task.dart';
@@ -25,6 +28,8 @@ class UploadTestPage extends StatefulWidget {
 
 class _UploadTestPageState extends State<UploadTestPage> {
   final ImagePicker _picker = ImagePicker();
+  final _photoRepo = CloudPhotoRepository();
+  final _shiftRepo = CloudShiftRepository();
 
   /// 上传策略：true = 缩略图+原图，false = 仅缩略图（默认）。
   bool _uploadOriginal = false;
@@ -89,6 +94,31 @@ class _UploadTestPageState extends State<UploadTestPage> {
       return '「$label」HEAD ${r.statusCode} · Content-Length: $len';
     } catch (e) {
       return '「$label」HEAD 失败（部分网关不支持 HEAD 或私有桶）: $e';
+    }
+  }
+
+  /// 将照片元数据写入云端 MySQL，并更新班次 photo_count。
+  Future<void> _writeCloudPhoto({
+    required int? sessionId,
+    required String thumbKey,
+    String? originalKey,
+  }) async {
+    final userId = CloudBaseClient.instance.currentUserId;
+    if (userId == null || sessionId == null) return;
+    try {
+      await _photoRepo.createPhoto(
+        userId: userId,
+        sessionId: sessionId,
+        thumbKey: thumbKey,
+        originalKey: originalKey,
+      );
+      // 同步更新班次照片计数
+      final shift = await _shiftRepo.getActiveShift(userId);
+      if (shift != null) {
+        await _shiftRepo.incrementPhotoCount(shift.id);
+      }
+    } catch (e) {
+      debugPrint('[upload] _writeCloudPhoto failed: $e');
     }
   }
 
@@ -224,6 +254,13 @@ class _UploadTestPageState extends State<UploadTestPage> {
           task.originalKey = originalKey;
           task.status = UploadStatus.success;
           await taskQueueRepository.update(task);
+
+          // 写入云端照片元数据 + 累计班次照片数
+          await _writeCloudPhoto(
+            sessionId: sessionManager.activeCloudSessionId,
+            thumbKey: thumbKey,
+            originalKey: originalKey,
+          );
 
           successCount++;
           firstThumbUrl ??= thumbUrl;

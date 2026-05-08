@@ -21,12 +21,14 @@ class CloudSessionRepository {
   Future<int?> createSession({
     required int userId,
     int? customerId,
+    int? shiftId,
     String? cosDirPrefix,
     String status = 'pending',
   }) async {
     final resp = await _client.post('/sessions', body: {
       'userId': userId,
       'customerId': customerId,
+      'shiftId': shiftId,
       'cosDirPrefix': cosDirPrefix,
       'status': status,
     });
@@ -63,5 +65,11 @@ class CloudSessionRepository {
       status: 'completed',
       endedAt: DateTime.now(),
     );
+  }
+
+  /// 获取当前用户进行中的 session（未完成/未收工）。
+  Future<CloudSession?> getActiveSession(int userId) async {
+    final sessions = await getSessions(userId);
+    return sessions.where((s) => s.status == CloudSessionStatus.active).firstOrNull;
   }
 }

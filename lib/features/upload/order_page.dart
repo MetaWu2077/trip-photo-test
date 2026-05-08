@@ -3,6 +3,7 @@ import '../../cloudbase/cloudbase_client.dart';
 import '../../cloudbase/models/cloud_session.dart';
 import '../../cloudbase/repositories/cloud_session_repository.dart';
 import '../customer/customer_selector_dialog.dart';
+import 'session_manager.dart';
 import 'task_queue_notifier.dart';
 
 /// 订单 Tab：云端会话列表，点击后开始/结束对应拍摄 session。
@@ -41,20 +42,18 @@ class _OrderPageState extends State<OrderPage> {
   Future<void> _createAndStartSession() async {
     // 先选客户
     final customer = await showCustomerSelectorDialog(context);
-    final userId = CloudBaseClient.instance.currentUserId;
-    if (userId == null || !mounted) return;
+    if (!mounted) return;
 
-    // 创建 session 并直接 start
-    final sessionId = await _sessionRepo.createSession(
-      userId: userId,
-      customerId: customer?.id,
-      cosDirPrefix: customer?.name ?? 'unknown',
-      status: 'active',
-    );
-    if (sessionId == null) {
+    try {
+      // 创建并激活 session，沿用当前 shift 的 shiftId
+      await sessionManager.startSession(
+        customerId: customer?.id,
+        shiftId: sessionManager.activeSession?.shiftId,
+      );
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('创建订单失败'), behavior: SnackBarBehavior.floating),
+        SnackBar(content: Text('创建订单失败: $e'), behavior: SnackBarBehavior.floating),
       );
       return;
     }
@@ -70,11 +69,12 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   Future<void> _startSession(CloudSession session) async {
-    final ok = await _sessionRepo.startSession(session.id);
-    if (!ok) {
+    try {
+      await sessionManager.setActiveSession(session);
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('启动失败'), behavior: SnackBarBehavior.floating),
+        SnackBar(content: Text('启动失败: $e'), behavior: SnackBarBehavior.floating),
       );
       return;
     }
@@ -90,6 +90,10 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   Future<void> _endSession(CloudSession session) async {
+    // 如果结束的是当前活跃 session，先让 SessionManager 也结束它
+    if (sessionManager.activeSession?.id == session.id) {
+      await sessionManager.endSession();
+    }
     final ok = await _sessionRepo.completeSession(session.id);
     if (!ok) {
       if (!mounted) return;

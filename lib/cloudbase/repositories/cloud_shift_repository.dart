@@ -66,5 +66,10 @@ class CloudShiftRepository {
     return shifts.where((s) => s.isActive).firstOrNull;
   }
 
+  /// 追加照片计数。
+  Future<void> incrementPhotoCount(int shiftId, {int delta = 1}) async {
+    await _client.patch('/shifts/$shiftId', body: {'photoCount': delta});
+  }
+
   String _today() => DateTime.now().toIso8601String().substring(0, 10);
 }
