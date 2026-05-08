@@ -78,7 +78,12 @@ async function ensureTables() {
     if (cols.length === 0) {
       await q(`ALTER TABLE sessions ADD COLUMN shift_id INT NULL AFTER customer_id`);
     }
-  } catch (_) { /* 列可能已存在或 sessions 表尚未创建，静默忽略 */ }
+  } catch (err) {
+    // 只忽略"列已存在"错误，其他错误打日志
+    if (!err.message?.includes('Duplicate column')) {
+      console.error('[ensureTables] alter sessions shift_id failed:', err.message);
+    }
+  }
 }
 
 function sendJson(status, data) {

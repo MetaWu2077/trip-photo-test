@@ -3,6 +3,7 @@ import '../../cloudbase/cloudbase_client.dart';
 import '../../cloudbase/models/cloud_session.dart';
 import '../../cloudbase/repositories/cloud_session_repository.dart';
 import '../customer/customer_selector_dialog.dart';
+import 'cloud_session_detail_page.dart';
 import 'session_manager.dart';
 import 'task_queue_notifier.dart';
 
@@ -108,6 +109,15 @@ class _OrderPageState extends State<OrderPage> {
       const SnackBar(content: Text('当前订单已结束'), behavior: SnackBarBehavior.floating),
     );
     taskQueueChangeNotifier.refresh();
+  }
+
+  void _viewDetail(CloudSession session) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CloudSessionDetailPage(session: session),
+      ),
+    );
   }
 
   String _statusIcon(CloudSessionStatus status) {
@@ -246,7 +256,10 @@ class _OrderPageState extends State<OrderPage> {
                                         color: session.status == CloudSessionStatus.active ? scheme.primary : null,
                                       ),
                                     ),
-                                    trailing: session.status == CloudSessionStatus.pending
+                                    onTap: session.status == CloudSessionStatus.completed
+                                        ? () => _viewDetail(session)
+                                        : null,
+                                  trailing: session.status == CloudSessionStatus.pending
                                         ? FilledButton.tonal(
                                             onPressed: () => _startSession(session),
                                             child: const Text('开始拍摄'),
